@@ -75,6 +75,14 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #d4af37;
         }
+        /* 自訂 Toast 動畫 */
+        @keyframes slideInUp {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .toast-animate {
+            animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-black">
@@ -124,12 +132,18 @@
                     <a href="#location" class="text-slate-300 hover:text-amber-400 transition-colors">賞車據點</a>
                 </div>
 
-                <!-- 員工後台登入按鈕 & 登入後專屬上架按鈕 -->
+                <!-- 員工後台登入按鈕 & 登入後專屬上架按鈕 & 雲端狀態 -->
                 <div class="flex items-center gap-3">
-                    <button id="navAddCarBtn" onclick="openStaffModal()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-900/30">
+                    <!-- 雲端連線狀態指示徽章 -->
+                    <div id="cloudStatusBadge" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 cursor-pointer" onclick="handleCloudStatusClick()">
+                        <span id="cloudStatusDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                        <span id="cloudStatusText">檢查雲端中...</span>
+                    </div>
+
+                    <button id="navAddCarBtn" onclick="openStaffModal('addCar')" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-900/30">
                         <i class="fa-solid fa-plus-circle"></i> 上架新車
                     </button>
-                    <button onclick="handleStaffAuthModal()" class="border border-amber-500/30 hover:border-amber-400 text-amber-400 hover:text-white hover:bg-amber-500/10 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
+                    <button id="navStaffAuthBtn" onclick="handleStaffAuthBtnClick()" class="border border-amber-500/30 hover:border-amber-400 text-amber-400 hover:text-white hover:bg-amber-500/10 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
                         <i class="fa-solid fa-user-lock"></i> <span id="staffBtnText">員工後台上架</span>
                     </button>
                 </div>
@@ -201,10 +215,13 @@
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
             <div>
                 <span class="text-xs font-bold text-amber-400 tracking-widest">EXCLUSIVE INVENTORY</span>
-                <h3 class="text-2xl sm:text-3xl font-black text-white mt-1">嚴選在庫車庫</h3>
+                <div class="flex items-center gap-3 mt-1">
+                    <h3 class="text-2xl sm:text-3xl font-black text-white">嚴選在庫車庫</h3>
+                    <span id="carCountBadge" class="text-xs bg-dark-900 border border-amber-500/30 text-amber-400 px-2.5 py-0.5 rounded-full font-bold">載入中...</span>
+                </div>
             </div>
             
-            <!-- 品牌篩選器 (含國產熱門品牌，排除納智捷) -->
+            <!-- 品牌篩選器 -->
             <div class="flex flex-wrap gap-2 text-xs" id="brandFilterContainer">
                 <button onclick="filterCars('ALL')" class="brand-filter-btn active bg-amber-500 text-black font-bold px-3 py-2 rounded-xl border border-amber-500">全部車輛</button>
                 <button onclick="filterCars('BMW')" class="brand-filter-btn bg-dark-900 text-slate-300 px-3 py-2 rounded-xl border border-slate-800 hover:border-amber-500/40">BMW</button>
@@ -356,57 +373,104 @@
         </div>
     </footer>
 
-    <!-- Modal 1: 員工後台管理 & 密碼修改 & 上架車輛 -->
-    <div id="staffModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-        <div class="bg-dark-900 border border-amber-500/30 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl max-h-[90vh] flex flex-col">
+    <!-- ============================================== -->
+    <!-- Modal 1: 員工後台管理 & 密碼修改 & 上架車輛 & 雲端設定 -->
+    <!-- ============================================== -->
+    <div id="staffModal" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-dark-900 border border-amber-500/30 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl max-h-[92vh] flex flex-col">
+            <!-- Modal Header -->
             <div class="bg-dark-950 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
-                <h4 class="font-bold text-amber-400 text-base flex items-center gap-2">
-                    <i class="fa-solid fa-sliders"></i> 員工專屬管理後台
-                </h4>
-                <button onclick="closeStaffModal()" class="text-slate-400 hover:text-white text-xl">&times;</button>
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-sm font-bold border border-amber-500/30">
+                        <i class="fa-solid fa-sliders"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-black text-amber-400 text-base">員工專屬管理後台</h4>
+                        <p class="text-[10px] text-slate-400">振軒車業內部車庫管理與全網雲端同步中心</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="handleLogout()" class="text-xs text-rose-400 hover:text-rose-300 border border-rose-500/30 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-rose-500/10 transition-all">
+                        <i class="fa-solid fa-arrow-right-from-bracket"></i> 登出
+                    </button>
+                    <button onclick="closeStaffModal()" class="text-slate-400 hover:text-white text-xl px-2">&times;</button>
+                </div>
             </div>
 
-            <div class="p-6 overflow-y-auto space-y-8 flex-grow">
-                <!-- 1. 變更後台密碼區塊 -->
-                <div class="bg-dark-950 p-5 rounded-xl border border-slate-800">
-                    <h5 class="font-bold text-white text-sm mb-3 flex items-center gap-2">
-                        <i class="fa-solid fa-key text-amber-400"></i> 修改後台登入密碼
-                    </h5>
-                    <div class="flex gap-3">
-                        <input type="password" id="newPasswordInput" placeholder="請輸入新後台密碼" class="flex-grow bg-dark-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-amber-500">
-                        <button onclick="updateStaffPassword()" class="gold-btn px-4 py-2 rounded-xl text-xs shrink-0">更新密碼</button>
+            <!-- Modal Body (可捲動) -->
+            <div class="p-6 overflow-y-auto space-y-6 flex-grow">
+
+                <!-- 0. 雲端同步狀態與連線設定 (核心修復：解決客人看不到的問題) -->
+                <div class="bg-dark-950 p-5 rounded-xl border border-amber-500/30 relative overflow-hidden">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                        <div class="flex items-center gap-2.5">
+                            <span id="modalCloudStatusDot" class="w-3 h-3 rounded-full bg-amber-400 animate-pulse"></span>
+                            <h5 class="font-black text-white text-sm flex items-center gap-2">
+                                <i class="fa-solid fa-cloud text-amber-400"></i> 全網雲端連線狀態 (訪客同步核心)
+                            </h5>
+                        </div>
+                        <span id="modalCloudStatusBadge" class="text-[11px] font-bold px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 w-fit">
+                            偵測連線中...
+                        </span>
                     </div>
+
+                    <!-- 雲端狀態說明提示 -->
+                    <div id="cloudAlertBox" class="p-3.5 rounded-xl text-xs mb-4 bg-amber-500/10 border border-amber-500/20 text-amber-300 leading-relaxed">
+                        <!-- 動態插入狀態文案 -->
+                    </div>
+
+                    <!-- 折疊式雲端設定面板 -->
+                    <details id="cloudConfigDetails" class="group">
+                        <summary class="cursor-pointer text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1.5 select-none py-1">
+                            <i class="fa-solid fa-chevron-right group-open:rotate-90 transition-transform"></i>
+                            <span>點擊展開 / 修改 Firebase 雲端金鑰設定 (30秒一鍵同步)</span>
+                        </summary>
+
+                        <div class="mt-4 pt-4 border-t border-slate-800 space-y-3 text-xs">
+                            <p class="text-slate-400 leading-relaxed">
+                                💡 <strong class="text-white">為什麼之前客人看不到？</strong> 因為原本的程式碼缺少您自己專屬的雲端資料庫（Firebase）金鑰，導致只能存放在本機。只要貼上您在 Firebase 申請的免費設定，全台灣任何客人點網址就能看到最新上架的車輛與大頭貼！
+                            </p>
+                            
+                            <div class="space-y-2">
+                                <label class="block text-slate-300 font-bold">貼上 Firebase Config (整段物件 或 JSON)：</label>
+                                <textarea id="customFirebaseConfigInput" rows="5" placeholder='{
+  "apiKey": "AIzaSy...",
+  "authDomain": "js-auto.firebaseapp.com",
+  "projectId": "js-auto",
+  "storageBucket": "js-auto.firebasestorage.app",
+  "messagingSenderId": "...",
+  "appId": "..."
+}' class="w-full bg-dark-900 border border-slate-800 rounded-xl p-3 font-mono text-[11px] text-amber-300 focus:border-amber-500 outline-none"></textarea>
+                            </div>
+
+                            <div class="flex flex-wrap gap-2 pt-1">
+                                <button onclick="saveCustomFirebaseConfig()" class="gold-btn px-4 py-2 rounded-xl font-bold flex items-center gap-1.5">
+                                    <i class="fa-solid fa-floppy-disk"></i> 儲存並立即連線雲端
+                                </button>
+                                <button onclick="clearCustomFirebaseConfig()" class="border border-slate-700 hover:border-rose-500/50 text-slate-300 hover:text-rose-400 px-4 py-2 rounded-xl transition-all">
+                                    清除自訂設定 (回退預設)
+                                </button>
+                                <button onclick="openFirebaseTutorialModal()" class="border border-amber-500/30 hover:border-amber-400 text-amber-400 px-4 py-2 rounded-xl flex items-center gap-1.5">
+                                    <i class="fa-solid fa-circle-question"></i> 免費 3 步驟申請教學
+                                </button>
+                            </div>
+                        </div>
+                    </details>
                 </div>
 
-                <!-- 2. Logo更換區塊 -->
-                <div class="bg-dark-950 p-5 rounded-xl border border-slate-800">
-                    <h5 class="font-bold text-white text-sm mb-3 flex items-center gap-2">
-                        <i class="fa-solid fa-camera text-amber-400"></i> 車行 LOGO 更換 (大頭貼上傳)
-                    </h5>
-                    <div class="flex flex-wrap items-center gap-4">
-                        <input type="file" id="logoInput" accept="image/*" class="hidden" onchange="handleLogoUpload(event)">
-                        <button onclick="document.getElementById('logoInput').click()" class="gold-btn px-4 py-2 rounded-xl text-xs flex items-center gap-2">
-                            <i class="fa-solid fa-upload"></i> 上傳 LOGO 圖片
-                        </button>
-                        <button onclick="resetLogo()" class="border border-slate-700 text-slate-300 hover:text-white px-4 py-2 rounded-xl text-xs">
-                            重設為預設狀態
-                        </button>
-                    </div>
-                </div>
-
-                <!-- 3. 新增入庫車輛 (檔案上傳) -->
-                <div class="bg-dark-950 p-5 rounded-xl border border-slate-800">
+                <!-- 1. 新增入庫車輛 (核心功能，含圖片自動優化壓縮) -->
+                <div id="addCarSection" class="bg-dark-950 p-5 rounded-xl border border-slate-800">
                     <h5 class="font-bold text-white text-sm mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-plus-circle text-amber-400"></i> 新增入庫車輛
+                        <i class="fa-solid fa-plus-circle text-amber-400"></i> 新增入庫車輛 (自動全網同步發布)
                     </h5>
                     <form id="addCarForm" onsubmit="handleAddCar(event)" class="space-y-4 text-xs">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-slate-400 mb-1">車輛名稱</label>
+                                <label class="block text-slate-400 mb-1">車輛名稱 <span class="text-rose-400">*</span></label>
                                 <input type="text" id="carTitle" required placeholder="例: 2021 BMW M4 Competition" class="w-full bg-dark-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white focus:border-amber-500 outline-none">
                             </div>
                             <div>
-                                <label class="block text-slate-400 mb-1">品牌分類</label>
+                                <label class="block text-slate-400 mb-1">品牌分類 <span class="text-rose-400">*</span></label>
                                 <select id="carBrand" class="w-full bg-dark-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white focus:border-amber-500 outline-none">
                                     <option value="BMW">BMW</option>
                                     <option value="BENZ">賓士 BENZ</option>
@@ -423,22 +487,32 @@
 
                         <div class="grid grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-slate-400 mb-1">出廠年份</label>
+                                <label class="block text-slate-400 mb-1">出廠年份 <span class="text-rose-400">*</span></label>
                                 <input type="number" id="carYear" required placeholder="2021" class="w-full bg-dark-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white focus:border-amber-500 outline-none">
                             </div>
                             <div>
-                                <label class="block text-slate-400 mb-1">售價 (萬元)</label>
+                                <label class="block text-slate-400 mb-1">售價 (萬元) <span class="text-rose-400">*</span></label>
                                 <input type="number" id="carPrice" required placeholder="388" class="w-full bg-dark-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white focus:border-amber-500 outline-none">
                             </div>
                             <div>
-                                <label class="block text-slate-400 mb-1">行駛里程</label>
+                                <label class="block text-slate-400 mb-1">行駛里程 <span class="text-rose-400">*</span></label>
                                 <input type="text" id="carMileage" placeholder="28,000 km" required class="w-full bg-dark-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white focus:border-amber-500 outline-none">
                             </div>
                         </div>
 
                         <div>
-                            <label class="block text-slate-400 mb-1">上傳實車照片檔案</label>
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="text-slate-400">上傳實車照片檔案 <span class="text-rose-400">*</span></label>
+                                <span class="text-[10px] text-amber-400 flex items-center gap-1">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> 內建高清智慧壓縮（手機直拍秒傳）
+                                </span>
+                            </div>
                             <input type="file" id="carImageFile" accept="image/*" required class="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-500 file:text-black hover:file:bg-amber-400 cursor-pointer bg-dark-900 border border-slate-800 rounded-xl">
+                            <!-- 圖片預覽縮圖 -->
+                            <div id="imagePreviewContainer" class="hidden mt-2 p-2 bg-dark-900 rounded-xl border border-slate-800 flex items-center gap-3">
+                                <img id="carImagePreview" src="" alt="預覽" class="w-16 h-12 object-cover rounded-lg border border-slate-700">
+                                <span id="imageCompressNotice" class="text-[11px] text-slate-400">已準備好照片</span>
+                            </div>
                         </div>
 
                         <div>
@@ -446,17 +520,68 @@
                             <textarea id="carDesc" rows="3" placeholder="碳纖維套件, 總代理, 台灣超級鑑定..." class="w-full bg-dark-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white focus:border-amber-500 outline-none"></textarea>
                         </div>
 
-                        <button type="submit" class="w-full gold-btn py-3 rounded-xl font-bold text-sm">
-                            <i class="fa-solid fa-cloud-arrow-up"></i> 確認發布上架
+                        <button id="submitCarBtn" type="submit" class="w-full gold-btn py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-cloud-arrow-up"></i> 確認發布上架 (同步全網)
                         </button>
                     </form>
                 </div>
+
+                <!-- 2. Logo更換區塊 (大頭貼上傳) -->
+                <div class="bg-dark-950 p-5 rounded-xl border border-slate-800">
+                    <h5 class="font-bold text-white text-sm mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-camera text-amber-400"></i> 車行 LOGO 更換 (全網大頭貼即時同步)
+                    </h5>
+                    <p class="text-xs text-slate-400 mb-3 leading-relaxed">
+                        上傳後將自動同步更換全站頂部、Hero 首頁中心與頁尾的大頭貼圖示。
+                    </p>
+                    <div class="flex flex-wrap items-center gap-4">
+                        <input type="file" id="logoInput" accept="image/*" class="hidden" onchange="handleLogoUpload(event)">
+                        <button onclick="document.getElementById('logoInput').click()" class="gold-btn px-4 py-2 rounded-xl text-xs flex items-center gap-2">
+                            <i class="fa-solid fa-upload"></i> 上傳 LOGO 圖片
+                        </button>
+                        <button onclick="resetLogo()" class="border border-slate-700 text-slate-300 hover:text-white px-4 py-2 rounded-xl text-xs">
+                            重設為預設狀態
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3. 在庫車輛列表與快速刪除管理 -->
+                <div class="bg-dark-950 p-5 rounded-xl border border-slate-800">
+                    <div class="flex items-center justify-between mb-3">
+                        <h5 class="font-bold text-white text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-amber-400"></i> 現有在庫車輛管理清單
+                        </h5>
+                        <div class="flex items-center gap-2">
+                            <button onclick="exportCarDataBackup()" class="text-[11px] border border-slate-700 hover:border-amber-500 text-slate-300 hover:text-amber-400 px-2.5 py-1 rounded-lg">
+                                <i class="fa-solid fa-download"></i> 匯出備份 (JSON)
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="staffCarList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                        <!-- 動態插入車輛管理行 -->
+                    </div>
+                </div>
+
+                <!-- 4. 變更後台密碼區塊 -->
+                <div class="bg-dark-950 p-5 rounded-xl border border-slate-800">
+                    <h5 class="font-bold text-white text-sm mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-key text-amber-400"></i> 修改員工後台密碼
+                    </h5>
+                    <div class="flex gap-3">
+                        <input type="password" id="newPasswordInput" placeholder="請輸入新後台密碼" class="flex-grow bg-dark-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-amber-500">
+                        <button onclick="updateStaffPassword()" class="gold-btn px-4 py-2 rounded-xl text-xs shrink-0">更新密碼</button>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
 
+    <!-- ============================================== -->
     <!-- Modal 2: 車輛詳細資訊彈窗 -->
-    <div id="carDetailModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <!-- ============================================== -->
+    <div id="carDetailModal" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
         <div class="bg-dark-900 border border-amber-500/30 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl max-h-[90vh] flex flex-col">
             <div class="bg-dark-950 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
                 <h4 id="detailTitle" class="font-bold text-white text-base">車輛詳情</h4>
@@ -512,55 +637,180 @@
         </div>
     </div>
 
-    <!-- Firebase 雲端資料庫模組與 JavaScript 控制邏輯 -->
+    <!-- ============================================== -->
+    <!-- Modal 3: 後台密碼登入彈窗 (取代瀏覽器原生 prompt) -->
+    <!-- ============================================== -->
+    <div id="staffLoginModal" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-dark-900 border border-amber-500/30 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl p-6 space-y-4">
+            <div class="text-center">
+                <div class="w-12 h-12 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl mx-auto mb-3 border border-amber-500/30">
+                    <i class="fa-solid fa-user-lock"></i>
+                </div>
+                <h4 class="text-base font-bold text-white">振軒車業後台登入</h4>
+                <p class="text-xs text-slate-400 mt-1">請輸入員工管理專屬密碼</p>
+            </div>
+            
+            <form onsubmit="handleStaffLoginForm(event)" class="space-y-4">
+                <div>
+                    <input type="password" id="staffLoginPasswordInput" placeholder="請輸入通行密碼 (預設: jsauto888)" class="w-full bg-dark-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white text-xs outline-none focus:border-amber-500 text-center tracking-widest">
+                </div>
+                <div class="flex gap-2">
+                    <button type="button" onclick="closeStaffLoginModal()" class="flex-1 border border-slate-700 text-slate-300 py-2.5 rounded-xl text-xs hover:text-white">
+                        取消
+                    </button>
+                    <button type="submit" class="flex-1 gold-btn py-2.5 rounded-xl text-xs font-bold">
+                        確認登入
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- Modal 4: 自訂確認彈窗 (取代原生 confirm) -->
+    <!-- ============================================== -->
+    <div id="confirmDialogModal" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl p-6 space-y-4 text-center">
+            <div class="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center text-xl mx-auto border border-rose-500/20">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div>
+                <h4 id="confirmDialogTitle" class="text-sm font-bold text-white">操作確認</h4>
+                <p id="confirmDialogMessage" class="text-xs text-slate-400 mt-1.5 leading-relaxed"></p>
+            </div>
+            <div class="flex gap-2 pt-2">
+                <button id="confirmDialogCancelBtn" class="flex-1 border border-slate-700 text-slate-300 py-2.5 rounded-xl text-xs hover:text-white">
+                    取消
+                </button>
+                <button id="confirmDialogConfirmBtn" class="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors">
+                    確認執行
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- Modal 5: Firebase 3 步驟免費申請教學彈窗 -->
+    <!-- ============================================== -->
+    <div id="firebaseTutorialModal" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-dark-900 border border-amber-500/30 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl max-h-[90vh] flex flex-col">
+            <div class="bg-dark-950 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+                <h4 class="font-bold text-amber-400 text-sm flex items-center gap-2">
+                    <i class="fa-brands fa-google"></i> 免費 3 步驟開通 Firebase 雲端資料庫
+                </h4>
+                <button onclick="closeFirebaseTutorialModal()" class="text-slate-400 hover:text-white text-xl">&times;</button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-300">
+                <div class="bg-dark-950 p-4 rounded-xl border border-slate-800">
+                    <p class="font-bold text-amber-400 mb-1">為什麼要用 Firebase？</p>
+                    <p class="text-slate-400 text-[11px]">
+                        Google Firebase 是全球最大的雲端資料庫之一，提供永久免費額度（每天高達 50,000 次讀取、20,000 次寫入），對於二手車行網站完全免費零成本，且全台灣客人點開都能即時同步！
+                    </p>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="flex gap-3 items-start">
+                        <span class="w-5 h-5 rounded-full bg-amber-500 text-black font-black flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                        <div>
+                            <p class="font-bold text-white">建立免費專案</p>
+                            <p class="text-slate-400 text-[11px]">前往 <a href="https://console.firebase.google.com/" target="_blank" class="text-amber-400 underline">Firebase 控制台</a>，登入 Google 帳號並點擊「新增專案」（例如命名為 <code>js-auto</code>）。</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-3 items-start">
+                        <span class="w-5 h-5 rounded-full bg-amber-500 text-black font-black flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                        <div>
+                            <p class="font-bold text-white">啟用 Firestore Database</p>
+                            <p class="text-slate-400 text-[11px]">在左側選單點擊「Firestore Database」 &rarr; 點擊「建立資料庫」 &rarr; 規則選擇「測試模式 (Test mode)」，地區選 <code>asia-east1 (台灣)</code> 或任一地區，點擊啟用。</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-3 items-start">
+                        <span class="w-5 h-5 rounded-full bg-amber-500 text-black font-black flex items-center justify-center text-[10px] shrink-0 mt-0.5">3</span>
+                        <div>
+                            <p class="font-bold text-white">複製網頁應用程式金鑰</p>
+                            <p class="text-slate-400 text-[11px]">在專案設定點擊新增「Web 應用程式 (網頁圖示 &lt;/&gt;)」，複製產生的 <code>firebaseConfig = { ... }</code> 物件，回到後台貼上並點擊「儲存並連線」，立即完成！</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-2 text-center">
+                    <button onclick="closeFirebaseTutorialModal()" class="gold-btn px-6 py-2 rounded-xl text-xs font-bold">
+                        我了解了，立即前往設定
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- Toast 通知容器 (取代原生 alert) -->
+    <!-- ============================================== -->
+    <div id="toastContainer" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full"></div>
+
+    <!-- ============================================== -->
+    <!-- Firebase 模組與 JavaScript 控制邏輯 (內建振軒車業專屬雲端金鑰) -->
+    <!-- ============================================== -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getDatabase, ref as dbRef, set as dbSet, push as dbPush, remove as dbRemove, onValue } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+        import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // 初始化 Firebase 配置 (雲端自動辨識)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'js-auto-app';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "AIzaSyDummyKeyForFallbackOnly",
-            authDomain: "js-auto-fallback.firebaseapp.com",
-            projectId: "js-auto-fallback",
-            storageBucket: "js-auto-fallback.appspot.com",
-            messagingSenderId: "123456789",
-            appId: "1:123456789:web:abcdef"
+        // ========================================================
+        // 1. 振軒車業 (JS-AUTO) 專屬雲端金鑰 (已直接綁定您的新加坡雲端資料庫)
+        // ========================================================
+        const DEFAULT_CONFIG_FALLBACK = {
+            apiKey: "AIzaSyCGBlYApvu4XN-soWPFtymmTf76QyQs-ro",
+            authDomain: "js-auto-dae51.firebaseapp.com",
+            databaseURL: "https://js-auto-dae51-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "js-auto-dae51",
+            storageBucket: "js-auto-dae51.firebasestorage.app",
+            messagingSenderId: "690336245983",
+            appId: "1:690336245983:web:f31e5b5797683d1f1a216a",
+            measurementId: "G-VJWQQ192SQ"
         };
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        // 全域變數
-        let isStaffLoggedIn = localStorage.getItem('js_staff_logged') === 'true';
-        let staffPassword = localStorage.getItem('js_staff_pwd') || 'jsauto888';
-        let carData = [];
-        let currentFilter = 'ALL';
-        let currentUser = null;
-
-        // 音速登入認證
-        async function initAuth() {
+        // 讀取順序：自訂儲存 > 振軒車業專屬內建金鑰
+        function getActiveFirebaseConfig() {
             try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
+                const customConfig = localStorage.getItem('js_custom_firebase_config');
+                if (customConfig) {
+                    const parsed = JSON.parse(customConfig);
+                    if (parsed && parsed.apiKey && parsed.apiKey !== "AIzaSyDummyKeyForFallbackOnly") {
+                        return parsed;
+                    }
                 }
-            } catch (err) {
-                console.log('Auth Notice:', err);
+            } catch (e) {
+                console.warn('讀取自訂 Firebase 設定失敗:', e);
             }
+            return DEFAULT_CONFIG_FALLBACK;
         }
 
-        onAuthStateChanged(auth, (user) => {
-            currentUser = user;
-            if (user) {
-                listenToCloudData();
-            }
-        });
+        let activeConfig = getActiveFirebaseConfig();
 
-        // 預設車輛資料
+        // 全域狀態變數
+        let app = null;
+        let auth = null;
+        let rtdb = null;
+        let db = null;
+        let isCloudConnected = false;
+        let activeEngine = 'RTDB'; // 優先使用您剛建好的新加坡 Realtime Database ('RTDB' 或 'FIRESTORE')
+
+        let isStaffLoggedIn = false;
+        try {
+            isStaffLoggedIn = localStorage.getItem('js_staff_logged') === 'true';
+        } catch(e) {}
+
+        let staffPassword = 'jsauto888';
+        try {
+            staffPassword = localStorage.getItem('js_staff_pwd') || 'jsauto888';
+        } catch(e) {}
+
+        let carData = [];
+        let currentFilter = 'ALL';
+
+        // 預設在庫車輛範本（當雲端尚未上架任何車時展示）
         const defaultCars = [
             {
                 id: 'default-1',
@@ -594,46 +844,305 @@
             }
         ];
 
-        // 雲端資料庫即時監聽與同步 (跨裝置同步關鍵)
-        function listenToCloudData() {
-            // 1. 監聽全站 LOGO 變更
-            const logoDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'logoConfig');
-            onSnapshot(logoDocRef, (docSnap) => {
-                if (docSnap.exists() && docSnap.data().logoUrl) {
-                    renderLogo(docSnap.data().logoUrl);
-                } else {
-                    renderLogo(localStorage.getItem('js_auto_logo'));
+        function loadLocalBackupCars() {
+            try {
+                const saved = localStorage.getItem('js_auto_local_cars');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        return parsed;
+                    }
                 }
-            }, (err) => console.log(err));
+            } catch (e) {}
+            return defaultCars;
+        }
 
-            // 2. 監聽雲端在庫車輛清單變更
-            const carsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'cars');
-            onSnapshot(carsColRef, (snapshot) => {
+        // ========================================================
+        // 2. 初始化與雙引擎連線邏輯 (Realtime Database + Firestore 雙重保障)
+        // ========================================================
+        async function initFirebaseConnection() {
+            activeConfig = getActiveFirebaseConfig();
+            const hasValidConfig = activeConfig && activeConfig.apiKey && activeConfig.projectId;
+
+            if (!hasValidConfig) {
+                setCloudStatus(false, '尚未連線雲端');
+                carData = loadLocalBackupCars();
+                try { renderLogo(localStorage.getItem('js_auto_logo')); } catch(e) {}
+                renderCars();
+                return;
+            }
+
+            try {
+                setCloudStatus(false, '連線雲端中...');
+                app = initializeApp(activeConfig);
+                auth = getAuth(app);
+
+                // 嘗試匿名登入 (若控制台未開啟匿名登入亦不阻斷資料庫連線)
+                try {
+                    await signInAnonymously(auth);
+                } catch(authErr) {
+                    console.log('略過匿名驗證，直接連線公開資料庫');
+                }
+
+                // 優先啟用您已建立的新加坡 Realtime Database
+                if (activeConfig.databaseURL) {
+                    rtdb = getDatabase(app);
+                    activeEngine = 'RTDB';
+                    listenToRealtimeDB();
+                } else {
+                    db = getFirestore(app);
+                    activeEngine = 'FIRESTORE';
+                    listenToFirestore();
+                }
+            } catch (err) {
+                console.error('Firebase 連線錯誤:', err);
+                setCloudStatus(false, '雲端連線失敗 (使用本機快取)');
+                carData = loadLocalBackupCars();
+                try { renderLogo(localStorage.getItem('js_auto_logo')); } catch(e) {}
+                renderCars();
+            }
+        }
+
+        // 監聽新加坡 Realtime Database (即時同步核心)
+        function listenToRealtimeDB() {
+            if (!rtdb) return;
+
+            // 1. 監聽全站 LOGO
+            const logoReference = dbRef(rtdb, 'settings/logoConfig');
+            onValue(logoReference, (snapshot) => {
+                setCloudStatus(true, '雲端已連線 (新加坡伺服器)');
+                const data = snapshot.val();
+                if (data && data.logoUrl) {
+                    renderLogo(data.logoUrl);
+                    try { localStorage.setItem('js_auto_logo', data.logoUrl); } catch(e) {}
+                } else {
+                    try { renderLogo(localStorage.getItem('js_auto_logo')); } catch(e) {}
+                }
+            }, (err) => {
+                console.warn('RTDB Logo 讀取提示:', err.message);
+                // 若 RTDB 權限未開，嘗試切換至 Firestore 備援
+                fallbackToFirestore(err.message);
+            });
+
+            // 2. 監聽全站在庫車輛
+            const carsReference = dbRef(rtdb, 'cars');
+            onValue(carsReference, (snapshot) => {
+                setCloudStatus(true, '雲端已連線 (新加坡伺服器)');
+                const val = snapshot.val();
                 const cloudCars = [];
-                snapshot.forEach(docSnap => {
-                    cloudCars.push({ id: docSnap.id, ...docSnap.data() });
-                });
+                if (val && typeof val === 'object') {
+                    Object.keys(val).forEach(key => {
+                        cloudCars.push({ id: key, ...val[key] });
+                    });
+                }
+
+                // 由新到舊排序
+                cloudCars.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
                 if (cloudCars.length > 0) {
                     carData = cloudCars;
                 } else {
-                    // 若雲端無資料則加載預設值
                     carData = defaultCars;
                 }
+                try { localStorage.setItem('js_auto_local_cars', JSON.stringify(carData)); } catch(e) {}
                 renderCars();
             }, (err) => {
-                console.log(err);
-                renderCars();
+                console.warn('RTDB 車輛讀取提示:', err.message);
+                fallbackToFirestore(err.message);
             });
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
-            initAuth();
-            updateLoginUI();
-            renderCars();
-        });
+        function fallbackToFirestore(reason) {
+            if (activeEngine === 'FIRESTORE') return;
+            try {
+                db = getFirestore(app);
+                activeEngine = 'FIRESTORE';
+                listenToFirestore();
+            } catch (e) {
+                setCloudStatus(false, '權限待開放 (' + reason + ')');
+                carData = loadLocalBackupCars();
+                renderCars();
+            }
+        }
 
-        // 渲染 Logo 函數
+        // 備援 Firestore 監聽器
+        function listenToFirestore() {
+            if (!db) return;
+
+            try {
+                const logoDocRef = doc(db, 'settings', 'logoConfig');
+                onSnapshot(logoDocRef, (docSnap) => {
+                    setCloudStatus(true, '雲端已連線 (Firestore)');
+                    if (docSnap.exists() && docSnap.data().logoUrl) {
+                        renderLogo(docSnap.data().logoUrl);
+                        try { localStorage.setItem('js_auto_logo', docSnap.data().logoUrl); } catch(e) {}
+                    } else {
+                        try { renderLogo(localStorage.getItem('js_auto_logo')); } catch(e) {}
+                    }
+                }, (err) => {
+                    console.warn('Firestore Logo 提示:', err.message);
+                    setCloudStatus(false, '請確認資料庫規則設為公開 (Test mode)');
+                });
+
+                const carsColRef = collection(db, 'cars');
+                onSnapshot(carsColRef, (snapshot) => {
+                    setCloudStatus(true, '雲端已連線 (Firestore)');
+                    const cloudCars = [];
+                    snapshot.forEach(docSnap => {
+                        cloudCars.push({ id: docSnap.id, ...docSnap.data() });
+                    });
+                    cloudCars.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                    carData = cloudCars.length > 0 ? cloudCars : defaultCars;
+                    try { localStorage.setItem('js_auto_local_cars', JSON.stringify(carData)); } catch(e) {}
+                    renderCars();
+                }, (err) => {
+                    console.warn('Firestore 車輛提示:', err.message);
+                    carData = loadLocalBackupCars();
+                    renderCars();
+                });
+            } catch (err) {
+                console.warn(err);
+            }
+        }
+
+        // ========================================================
+        // 3. 雲端狀態 UI 與管理介面
+        // ========================================================
+        function setCloudStatus(connected, text) {
+            isCloudConnected = connected;
+            
+            const badge = document.getElementById('cloudStatusBadge');
+            const dot = document.getElementById('cloudStatusDot');
+            const statusText = document.getElementById('cloudStatusText');
+            
+            if (badge && dot && statusText) {
+                statusText.innerText = connected ? '雲端已連線 (全網同步)' : '檢查資料庫規則';
+                if (connected) {
+                    badge.className = 'hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 cursor-pointer';
+                    dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+                } else {
+                    badge.className = 'hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30 cursor-pointer';
+                    dot.className = 'w-2 h-2 rounded-full bg-rose-400 animate-pulse';
+                }
+            }
+
+            const modalDot = document.getElementById('modalCloudStatusDot');
+            const modalBadge = document.getElementById('modalCloudStatusBadge');
+            const alertBox = document.getElementById('cloudAlertBox');
+
+            if (modalDot && modalBadge && alertBox) {
+                if (connected) {
+                    modalDot.className = 'w-3 h-3 rounded-full bg-emerald-400';
+                    modalBadge.className = 'text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 w-fit';
+                    modalBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> 新加坡雲端即時同步中';
+                    alertBox.className = 'p-3.5 rounded-xl text-xs mb-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 leading-relaxed';
+                    alertBox.innerHTML = `
+                        <strong>🟢 振軒車業專屬雲端 (` + activeConfig.projectId + `) 已連線：</strong><br>
+                        目前已成功綁定您的新加坡雲端資料庫！您現在上架的任何車輛、更換的大頭貼，全台灣的客人點開連結都能即時同步看見！
+                    `;
+                } else {
+                    modalDot.className = 'w-3 h-3 rounded-full bg-rose-400 animate-pulse';
+                    modalBadge.className = 'text-[11px] font-bold px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30 w-fit';
+                    modalBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 需確認資料庫讀寫權限 (Rules)';
+                    alertBox.className = 'p-3.5 rounded-xl text-xs mb-4 bg-amber-500/10 border border-amber-500/20 text-amber-300 leading-relaxed';
+                    alertBox.innerHTML = `
+                        <strong>⚠️ 金鑰已綁定，若無法同步請確認 Firebase「規則 (Rules)」：</strong><br>
+                        請在 Firebase 左側點選「Realtime Database」&rarr; 上方點選「規則 (Rules)」，確認設定為：<br>
+                        <code>{ "rules": { ".read": true, ".write": true } }</code> 並點擊「發布」。
+                    `;
+                }
+            }
+        }
+
+        window.handleCloudStatusClick = function() {
+            if (!isStaffLoggedIn) {
+                openStaffLoginModal();
+            } else {
+                openStaffModal('cloud');
+            }
+        };
+
+        window.saveCustomFirebaseConfig = async function() {
+            const raw = document.getElementById('customFirebaseConfigInput').value.trim();
+            if (!raw) {
+                showToast('請輸入有效的 Firebase Config 物件！', 'warning');
+                return;
+            }
+
+            try {
+                let parsed = null;
+                if (raw.includes('{') && raw.includes('}')) {
+                    const jsonStr = raw
+                        .replace(/^[^{]*/, '')
+                        .replace(/[^}]*$/, '')
+                        .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":')
+                        .replace(/'/g, '"')
+                        .replace(/,\s*}/g, '}');
+                    parsed = JSON.parse(jsonStr);
+                } else {
+                    parsed = JSON.parse(raw);
+                }
+
+                if (!parsed || !parsed.apiKey || !parsed.projectId) {
+                    showToast('格式不完整，需至少包含 apiKey 與 projectId！', 'error');
+                    return;
+                }
+
+                localStorage.setItem('js_custom_firebase_config', JSON.stringify(parsed));
+                showToast('已儲存自訂雲端設定！正在重新連線...', 'info');
+                window.location.reload();
+            } catch (err) {
+                showToast('解析設定字串失敗: ' + err.message, 'error');
+            }
+        };
+
+        window.clearCustomFirebaseConfig = async function() {
+            showConfirmDialog('重設回內建金鑰', '確定要清除自訂修改，恢復使用內建的振軒車業 (js-auto-dae51) 雲端金鑰嗎？', async () => {
+                localStorage.removeItem('js_custom_firebase_config');
+                document.getElementById('customFirebaseConfigInput').value = '';
+                showToast('已恢復內建專屬金鑰', 'info');
+                window.location.reload();
+            });
+        };
+
+        // ========================================================
+        // 4. 圖片智慧壓縮核心演算法 (確保手機直拍秒傳雲端)
+        // ========================================================
+        function compressImage(file, maxWidth = 1200, quality = 0.78) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > maxWidth) {
+                            height = Math.round((height * maxWidth) / width);
+                            width = maxWidth;
+                        }
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+                        resolve(compressedBase64);
+                    };
+                    img.onerror = (err) => reject(err);
+                };
+                reader.onerror = (err) => reject(err);
+            });
+        }
+
+        // ========================================================
+        // 5. 渲染視圖函數 (Cars, Logo, Filter)
+        // ========================================================
         window.renderLogo = function(logoUrl) {
             const logoContainers = ['navLogoContainer', 'heroLogoContainer', 'footerLogoContainer'];
 
@@ -653,76 +1162,389 @@
             });
         };
 
-        // Logo 檔案上傳 (同步至雲端)
+        window.renderCars = function() {
+            const carGrid = document.getElementById('carGrid');
+            const countBadge = document.getElementById('carCountBadge');
+            const staffCarList = document.getElementById('staffCarList');
+
+            const filteredCars = currentFilter === 'ALL' 
+                ? carData 
+                : carData.filter(car => car.brand === currentFilter);
+
+            if (countBadge) {
+                countBadge.innerText = `在席車庫 ${carData.length} 輛`;
+            }
+
+            if (carGrid) {
+                if (filteredCars.length === 0) {
+                    carGrid.innerHTML = `
+                        <div class="col-span-full text-center py-16 text-slate-500 bg-dark-900/50 rounded-2xl border border-slate-800">
+                            <i class="fa-solid fa-car-tunnel text-4xl mb-3 block text-slate-600"></i>
+                            <p class="text-sm font-bold text-slate-400">目前尚無該品牌在庫車輛</p>
+                            <p class="text-xs text-slate-500 mt-1">歡迎隨時聯繫客服或預約找車服務</p>
+                        </div>
+                    `;
+                } else {
+                    carGrid.innerHTML = filteredCars.map(car => `
+                        <div class="bg-dark-900 border border-slate-800 rounded-2xl overflow-hidden card-hover flex flex-col justify-between">
+                            <div>
+                                <div class="relative h-52 overflow-hidden bg-black group cursor-pointer" onclick="openDetailModal('${car.id}')">
+                                    <img src="${car.image}" alt="${car.title}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onerror="this.src='https://placehold.co/600x400/07080c/334155?text=JS-AUTO'">
+                                    <div class="absolute top-3 left-3 bg-amber-500 text-black text-[10px] font-black px-2.5 py-1 rounded-md shadow-md">
+                                        ${car.brand}
+                                    </div>
+                                    <div class="absolute bottom-3 right-3 bg-dark-950/80 backdrop-blur-md border border-amber-500/30 text-amber-400 text-xs font-bold px-2.5 py-1 rounded-md">
+                                        <i class="fa-solid fa-award"></i> 台灣超級鑑定
+                                    </div>
+                                </div>
+
+                                <div class="p-5 space-y-3">
+                                    <h4 class="font-black text-white text-base hover:text-amber-400 cursor-pointer transition-colors" onclick="openDetailModal('${car.id}')">
+                                        ${car.title}
+                                    </h4>
+
+                                    <div class="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-3">
+                                        <span><i class="fa-regular fa-calendar-check text-amber-400"></i> ${car.year} 年</span>
+                                        <span><i class="fa-solid fa-road text-amber-400"></i> ${car.mileage}</span>
+                                    </div>
+
+                                    <div class="flex flex-wrap gap-1.5 text-[10px]">
+                                        <span class="bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20"><i class="fa-solid fa-car-burst"></i> 無事故</span>
+                                        <span class="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20"><i class="fa-solid fa-droplet"></i> 無泡水</span>
+                                        <span class="bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20"><i class="fa-solid fa-gauge-high"></i> 無調表</span>
+                                    </div>
+
+                                    <p class="text-xs text-slate-400 line-clamp-2">${car.desc || '嚴選認證中古車，車況透明，歡迎預約親臨現場試乘體驗。'}</p>
+                                </div>
+                            </div>
+
+                            <div class="p-5 pt-0 flex items-center justify-between">
+                                <div>
+                                    <span class="text-[10px] text-slate-500 block">售價</span>
+                                    <span class="text-xl font-black text-amber-400">${car.price} <span class="text-xs font-normal text-slate-400">萬</span></span>
+                                </div>
+                                <div class="flex gap-2">
+                                    ${isStaffLoggedIn ? `
+                                        <button onclick="deleteCar('${car.id}')" class="bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1">
+                                            <i class="fa-solid fa-trash"></i> 刪除
+                                        </button>
+                                    ` : ''}
+                                    <button onclick="openDetailModal('${car.id}')" class="gold-btn px-4 py-2 rounded-xl text-xs">
+                                        詳情
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            if (staffCarList) {
+                if (carData.length === 0) {
+                    staffCarList.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">庫房中尚無車輛</p>`;
+                } else {
+                    staffCarList.innerHTML = carData.map(car => `
+                        <div class="flex items-center justify-between p-2.5 bg-dark-900 rounded-xl border border-slate-800 text-xs">
+                            <div class="flex items-center gap-3">
+                                <img src="${car.image}" class="w-10 h-8 object-cover rounded-lg border border-slate-700 shrink-0" onerror="this.src='https://placehold.co/100x80/07080c/334155?text=JS'">
+                                <div>
+                                    <p class="font-bold text-white">${car.title}</p>
+                                    <p class="text-[10px] text-slate-400">${car.brand} · ${car.year} 年 · 售價 ${car.price} 萬</p>
+                                </div>
+                            </div>
+                            <button onclick="deleteCar('${car.id}')" class="text-rose-400 hover:text-rose-300 p-1.5 hover:bg-rose-500/10 rounded-lg transition-colors" title="刪除此車">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    `).join('');
+                }
+            }
+        };
+
+        window.filterCars = function(brand) {
+            currentFilter = brand;
+            document.querySelectorAll('.brand-filter-btn').forEach(btn => {
+                btn.classList.remove('bg-amber-500', 'text-black', 'font-bold');
+                btn.classList.add('bg-dark-900', 'text-slate-300');
+            });
+            if (window.event && window.event.target) {
+                window.event.target.classList.add('bg-amber-500', 'text-black', 'font-bold');
+            }
+            renderCars();
+        };
+
+        // ========================================================
+        // 6. 新增車輛、LOGO 上傳與刪除 (同步寫入新加坡 Realtime DB / Firestore)
+        // ========================================================
+        window.handleAddCar = async function(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitCarBtn');
+            const fileInput = document.getElementById('carImageFile');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                showToast('請務必選擇車輛實車照片檔案！', 'warning');
+                return;
+            }
+
+            try {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 正在智慧壓縮並同步發布至雲端...';
+
+                const compressedImage = await compressImage(file, 1280, 0.78);
+
+                const newCar = {
+                    title: document.getElementById('carTitle').value.trim(),
+                    brand: document.getElementById('carBrand').value,
+                    year: document.getElementById('carYear').value.trim(),
+                    price: document.getElementById('carPrice').value.trim(),
+                    mileage: document.getElementById('carMileage').value.trim(),
+                    image: compressedImage,
+                    desc: document.getElementById('carDesc').value.trim(),
+                    createdAt: Date.now()
+                };
+
+                let uploadedToCloud = false;
+
+                if (activeEngine === 'RTDB' && rtdb) {
+                    try {
+                        const carsListRef = dbRef(rtdb, 'cars');
+                        const newCarRef = dbPush(carsListRef);
+                        await dbSet(newCarRef, newCar);
+                        uploadedToCloud = true;
+                    } catch (rtdbErr) {
+                        console.error('RTDB 寫入失敗，嘗試 Firestore:', rtdbErr);
+                    }
+                }
+
+                if (!uploadedToCloud && db) {
+                    try {
+                        const carsColRef = collection(db, 'cars');
+                        await addDoc(carsColRef, newCar);
+                        uploadedToCloud = true;
+                    } catch (fsErr) {
+                        console.error('Firestore 寫入失敗:', fsErr);
+                    }
+                }
+
+                if (uploadedToCloud) {
+                    showToast('🎉 車輛已成功上傳至雲端！所有訪問網站的客人皆可即時看見。', 'success');
+                } else {
+                    newCar.id = 'local-' + Date.now();
+                    carData.unshift(newCar);
+                    localStorage.setItem('js_auto_local_cars', JSON.stringify(carData));
+                    renderCars();
+                    showToast('⚠️ 雲端資料庫權限尚未開放寫入，已先儲存於本機。請檢查 Firebase Realtime Database 的「規則 (Rules)」是否設為 true！', 'warning');
+                }
+
+                document.getElementById('addCarForm').reset();
+                document.getElementById('imagePreviewContainer').classList.add('hidden');
+                closeStaffModal();
+            } catch (err) {
+                showToast('處理上架照片失敗: ' + err.message, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> 確認發布上架 (同步全網)';
+            }
+        };
+
+        const carImageFileInput = document.getElementById('carImageFile');
+        if (carImageFileInput) {
+            carImageFileInput.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const previewContainer = document.getElementById('imagePreviewContainer');
+                const previewImg = document.getElementById('carImagePreview');
+                const notice = document.getElementById('imageCompressNotice');
+
+                const origSizeMb = (file.size / (1024 * 1024)).toFixed(2);
+                notice.innerText = `原始大小: ${origSizeMb} MB (上架時將自動壓縮為極速瀏覽格式)`;
+                previewContainer.classList.remove('hidden');
+
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    previewImg.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // 刪除車輛
+        window.deleteCar = function(id) {
+            showConfirmDialog('確認刪除車輛', '確定要將此車輛從庫房與全網網站中永久刪除嗎？', async () => {
+                const isCloudItem = !String(id).startsWith('default-') && !String(id).startsWith('local-');
+
+                if (isCloudItem && activeEngine === 'RTDB' && rtdb) {
+                    try {
+                        await dbRemove(dbRef(rtdb, 'cars/' + String(id)));
+                        showToast('車輛已成功從雲端庫房刪除！', 'success');
+                        return;
+                    } catch (err) {
+                        console.error('RTDB 刪除失敗:', err);
+                    }
+                }
+
+                if (isCloudItem && db) {
+                    try {
+                        await deleteDoc(doc(db, 'cars', String(id)));
+                        showToast('車輛已成功從雲端庫房刪除！', 'success');
+                        return;
+                    } catch (err) {
+                        console.error('Firestore 刪除失敗:', err);
+                    }
+                }
+
+                carData = carData.filter(c => String(c.id) !== String(id));
+                try { localStorage.setItem('js_auto_local_cars', JSON.stringify(carData)); } catch(e) {}
+                renderCars();
+                showToast('車輛已從列表中移除。', 'info');
+            });
+        };
+
+        // 上傳 LOGO
         window.handleLogoUpload = async function(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            const reader = new FileReader();
-            reader.onload = async function(e) {
-                const base64Logo = e.target.result;
-                localStorage.setItem('js_auto_logo', base64Logo);
-                renderLogo(base64Logo);
+            try {
+                showToast('正在壓縮並上傳新 LOGO 大頭貼...', 'info');
+                const compressedLogo = await compressImage(file, 500, 0.85);
 
-                if (currentUser) {
+                try { localStorage.setItem('js_auto_logo', compressedLogo); } catch(e) {}
+                renderLogo(compressedLogo);
+
+                let synced = false;
+                if (activeEngine === 'RTDB' && rtdb) {
                     try {
-                        const logoDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'logoConfig');
-                        await setDoc(logoDocRef, { logoUrl: base64Logo, updatedAt: Date.now() });
-                        alert('車行 LOGO 已成功同步上傳至全網雲端！所有訪客皆可即時看見。');
-                    } catch (err) {
-                        alert('本地已更新。雲端同步提醒：' + err.message);
+                        await dbSet(dbRef(rtdb, 'settings/logoConfig'), { logoUrl: compressedLogo, updatedAt: Date.now() });
+                        synced = true;
+                    } catch (e) {
+                        console.error('RTDB Logo 同步失敗:', e);
                     }
                 }
-            };
-            reader.readAsDataURL(file);
+
+                if (!synced && db) {
+                    try {
+                        await setDoc(doc(db, 'settings', 'logoConfig'), { logoUrl: compressedLogo, updatedAt: Date.now() });
+                        synced = true;
+                    } catch (e) {
+                        console.error('Firestore Logo 同步失敗:', e);
+                    }
+                }
+
+                if (synced) {
+                    showToast('🎉 車行 LOGO 大頭貼已成功同步至全網雲端！所有訪客即刻可見。', 'success');
+                } else {
+                    showToast('⚠️ LOGO 本地已更新，但雲端寫入被拒，請確認 Firebase Rules 已設為公開讀寫！', 'warning');
+                }
+            } catch (err) {
+                showToast('處理 LOGO 圖片失敗: ' + err.message, 'error');
+            }
         };
 
+        // 重設 LOGO
         window.resetLogo = async function() {
-            localStorage.removeItem('js_auto_logo');
-            renderLogo(null);
+            showConfirmDialog('重設 LOGO', '確定要將全站 LOGO 大頭貼重設為預設狀態嗎？', async () => {
+                try { localStorage.removeItem('js_auto_logo'); } catch(e) {}
+                renderLogo(null);
 
-            if (currentUser) {
-                try {
-                    const logoDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'logoConfig');
-                    await setDoc(logoDocRef, { logoUrl: '', updatedAt: Date.now() });
-                    alert('全網 LOGO 已成功重設為預設狀態。');
-                } catch (err) {
-                    console.log(err);
+                if (activeEngine === 'RTDB' && rtdb) {
+                    try {
+                        await dbSet(dbRef(rtdb, 'settings/logoConfig'), { logoUrl: '', updatedAt: Date.now() });
+                        showToast('全網 LOGO 已成功重設。', 'success');
+                        return;
+                    } catch (err) {}
                 }
+                if (db) {
+                    try {
+                        await setDoc(doc(db, 'settings', 'logoConfig'), { logoUrl: '', updatedAt: Date.now() });
+                        showToast('全網 LOGO 已成功重設。', 'success');
+                        return;
+                    } catch (err) {}
+                }
+                showToast('本機 LOGO 已重設為預設。', 'info');
+            });
+        };
+
+        // 匯出備份
+        window.exportCarDataBackup = function() {
+            try {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(carData, null, 2));
+                const downloadAnchor = document.createElement('a');
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", `JS_AUTO_Cars_Backup_${new Date().toISOString().slice(0,10)}.json`);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+                showToast('車輛資料備份已順利下載至您的裝置！', 'success');
+            } catch (err) {
+                showToast('匯出失敗: ' + err.message, 'error');
             }
         };
 
-        // 後台登入驗證
-        window.handleStaffAuthModal = function() {
+        // ========================================================
+        // 7. 員工後台驗證與 UI 邏輯
+        // ========================================================
+        window.handleStaffAuthBtnClick = function() {
             if (isStaffLoggedIn) {
-                if (confirm('是否要登出員工後台權限？')) {
-                    isStaffLoggedIn = false;
-                    localStorage.setItem('js_staff_logged', 'false');
-                    updateLoginUI();
-                    alert('已順利登出後台。');
-                }
-                return;
-            }
-
-            const password = prompt('【振軒車業後台】請輸入員工登入密碼：');
-            if (password === staffPassword) {
-                isStaffLoggedIn = true;
-                localStorage.setItem('js_staff_logged', 'true');
-                updateLoginUI();
                 openStaffModal();
-            } else if (password !== null) {
-                alert('密碼輸入錯誤，無法進入管理後台。');
+            } else {
+                openStaffLoginModal();
             }
         };
 
-        // 更新 UI
+        window.openStaffLoginModal = function() {
+            const modal = document.getElementById('staffLoginModal');
+            const input = document.getElementById('staffLoginPasswordInput');
+            if (modal) {
+                modal.classList.remove('hidden');
+                if (input) {
+                    input.value = '';
+                    setTimeout(() => input.focus(), 100);
+                }
+            }
+        };
+
+        window.closeStaffLoginModal = function() {
+            const modal = document.getElementById('staffLoginModal');
+            if (modal) modal.classList.add('hidden');
+        };
+
+        window.handleStaffLoginForm = function(e) {
+            e.preventDefault();
+            const input = document.getElementById('staffLoginPasswordInput');
+            const entered = input ? input.value.trim() : '';
+
+            if (entered === staffPassword) {
+                isStaffLoggedIn = true;
+                try { localStorage.setItem('js_staff_logged', 'true'); } catch(e) {}
+                closeStaffLoginModal();
+                updateLoginUI();
+                showToast('🎉 歡迎進入員工管理後台！', 'success');
+                openStaffModal();
+            } else {
+                showToast('密碼輸入錯誤，請重新確認！', 'error');
+            }
+        };
+
+        window.handleLogout = function() {
+            showConfirmDialog('登出管理後台', '確定要登出員工管理模式嗎？', () => {
+                isStaffLoggedIn = false;
+                try { localStorage.setItem('js_staff_logged', 'false'); } catch(e) {}
+                closeStaffModal();
+                updateLoginUI();
+                showToast('已安全登出後台。', 'info');
+            });
+        };
+
         window.updateLoginUI = function() {
             const navAddBtn = document.getElementById('navAddCarBtn');
             const staffBtnText = document.getElementById('staffBtnText');
 
             if (isStaffLoggedIn) {
                 if (navAddBtn) navAddBtn.classList.remove('hidden');
-                if (staffBtnText) staffBtnText.innerText = '管理後台中 (點擊登出)';
+                if (staffBtnText) staffBtnText.innerText = '管理中心 (已登入)';
             } else {
                 if (navAddBtn) navAddBtn.classList.add('hidden');
                 if (staffBtnText) staffBtnText.innerText = '員工後台上架';
@@ -730,178 +1552,43 @@
             renderCars();
         };
 
-        // 修改密碼
-        window.updateStaffPassword = function() {
-            const newPwd = document.getElementById('newPasswordInput').value.trim();
-            if (!newPwd) {
-                alert('請輸入有效的新密碼！');
-                return;
-            }
-            staffPassword = newPwd;
-            localStorage.setItem('js_staff_pwd', newPwd);
-            document.getElementById('newPasswordInput').value = '';
-            alert('後台通行密碼已成功更新！');
-        };
-
-        window.openStaffModal = function() {
+        window.openStaffModal = function(tab) {
             if (!isStaffLoggedIn) {
-                handleStaffAuthModal();
+                openStaffLoginModal();
                 return;
             }
-            document.getElementById('staffModal').classList.remove('hidden');
+            const modal = document.getElementById('staffModal');
+            if (modal) modal.classList.remove('hidden');
+
+            const input = document.getElementById('customFirebaseConfigInput');
+            if (input && !input.value) {
+                input.value = JSON.stringify(activeConfig, null, 2);
+            }
+
+            if (tab === 'cloud') {
+                const details = document.getElementById('cloudConfigDetails');
+                if (details) details.open = true;
+            }
         };
 
         window.closeStaffModal = function() {
-            document.getElementById('staffModal').classList.add('hidden');
+            const modal = document.getElementById('staffModal');
+            if (modal) modal.classList.add('hidden');
         };
 
-        // 渲染車輛卡片
-        window.renderCars = function() {
-            const carGrid = document.getElementById('carGrid');
-            if (!carGrid) return;
-
-            const filteredCars = currentFilter === 'ALL' 
-                ? carData 
-                : carData.filter(car => car.brand === currentFilter);
-
-            if (filteredCars.length === 0) {
-                carGrid.innerHTML = `
-                    <div class="col-span-full text-center py-12 text-slate-500">
-                        <i class="fa-solid fa-car-tunnel text-4xl mb-3 block"></i>
-                        <p>目前尚無該品牌在庫車輛</p>
-                    </div>
-                `;
+        window.updateStaffPassword = function() {
+            const input = document.getElementById('newPasswordInput');
+            const newPwd = input ? input.value.trim() : '';
+            if (!newPwd) {
+                showToast('請輸入有效的新密碼！', 'warning');
                 return;
             }
-
-            carGrid.innerHTML = filteredCars.map(car => `
-                <div class="bg-dark-900 border border-slate-800 rounded-2xl overflow-hidden card-hover flex flex-col justify-between">
-                    <div>
-                        <div class="relative h-52 overflow-hidden bg-black group cursor-pointer" onclick="openDetailModal('${car.id}')">
-                            <img src="${car.image}" alt="${car.title}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onerror="this.src='https://placehold.co/600x400/07080c/334155?text=JS-AUTO'">
-                            <div class="absolute top-3 left-3 bg-amber-500 text-black text-[10px] font-black px-2.5 py-1 rounded-md shadow-md">
-                                ${car.brand}
-                            </div>
-                            <div class="absolute bottom-3 right-3 bg-dark-950/80 backdrop-blur-md border border-amber-500/30 text-amber-400 text-xs font-bold px-2.5 py-1 rounded-md">
-                                <i class="fa-solid fa-award"></i> 台灣超級鑑定
-                            </div>
-                        </div>
-
-                        <div class="p-5 space-y-3">
-                            <h4 class="font-black text-white text-base hover:text-amber-400 cursor-pointer transition-colors" onclick="openDetailModal('${car.id}')">
-                                ${car.title}
-                            </h4>
-
-                            <div class="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-3">
-                                <span><i class="fa-regular fa-calendar-check text-amber-400"></i> ${car.year} 年</span>
-                                <span><i class="fa-solid fa-road text-amber-400"></i> ${car.mileage}</span>
-                            </div>
-
-                            <div class="flex flex-wrap gap-1.5 text-[10px]">
-                                <span class="bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20"><i class="fa-solid fa-car-burst"></i> 無事故</span>
-                                <span class="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20"><i class="fa-solid fa-droplet"></i> 無泡水</span>
-                                <span class="bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20"><i class="fa-solid fa-gauge-high"></i> 無調表</span>
-                            </div>
-
-                            <p class="text-xs text-slate-400 line-clamp-2">${car.desc}</p>
-                        </div>
-                    </div>
-
-                    <div class="p-5 pt-0 flex items-center justify-between">
-                        <div>
-                            <span class="text-[10px] text-slate-500 block">售價</span>
-                            <span class="text-xl font-black text-amber-400">${car.price} <span class="text-xs font-normal text-slate-400">萬</span></span>
-                        </div>
-                        <div class="flex gap-2">
-                            ${isStaffLoggedIn ? `
-                                <button onclick="deleteCar('${car.id}')" class="bg-red-500/10 text-red-400 hover:bg-red-500/20 px-3 py-2 rounded-xl text-xs font-bold transition-all">
-                                    <i class="fa-solid fa-trash"></i> 刪除
-                                </button>
-                            ` : ''}
-                            <button onclick="openDetailModal('${car.id}')" class="gold-btn px-4 py-2 rounded-xl text-xs">
-                                詳情
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
+            staffPassword = newPwd;
+            try { localStorage.setItem('js_staff_pwd', newPwd); } catch(e) {}
+            input.value = '';
+            showToast('員工後台通行密碼已順利更新！', 'success');
         };
 
-        // 品牌篩選
-        window.filterCars = function(brand) {
-            currentFilter = brand;
-            document.querySelectorAll('.brand-filter-btn').forEach(btn => {
-                btn.classList.remove('bg-amber-500', 'text-black', 'font-bold');
-                btn.classList.add('bg-dark-900', 'text-slate-300');
-            });
-            if (event && event.target) {
-                event.target.classList.add('bg-amber-500', 'text-black', 'font-bold');
-            }
-            renderCars();
-        };
-
-        // 雲端上架車輛
-        window.handleAddCar = async function(e) {
-            e.preventDefault();
-            const imageFile = document.getElementById('carImageFile').files[0];
-            if (!imageFile) {
-                alert('請選擇車輛圖片檔案！');
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = async function(event) {
-                const newCarData = {
-                    title: document.getElementById('carTitle').value,
-                    brand: document.getElementById('carBrand').value,
-                    year: document.getElementById('carYear').value,
-                    price: document.getElementById('carPrice').value,
-                    mileage: document.getElementById('carMileage').value,
-                    image: event.target.result,
-                    desc: document.getElementById('carDesc').value,
-                    createdAt: Date.now()
-                };
-
-                if (currentUser) {
-                    try {
-                        const carsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'cars');
-                        await addDoc(carsColRef, newCarData);
-                        alert('新車輛已成功上傳至雲端！所有訪問網站的客人都能即時看到。');
-                    } catch (err) {
-                        alert('上傳至雲端時出錯：' + err.message);
-                    }
-                } else {
-                    carData.unshift({ id: String(Date.now()), ...newCarData });
-                    renderCars();
-                    alert('本機上架成功！');
-                }
-
-                closeStaffModal();
-                document.getElementById('addCarForm').reset();
-            };
-            reader.readAsDataURL(imageFile);
-        };
-
-        // 雲端刪除車輛
-        window.deleteCar = async function(id) {
-            if (confirm('確定要從雲端庫房中刪除此車輛資訊嗎？')) {
-                if (currentUser && !String(id).startsWith('default-')) {
-                    try {
-                        const carDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'cars', String(id));
-                        await deleteDoc(carDocRef);
-                        alert('車輛已成功從雲端刪除！');
-                    } catch (err) {
-                        alert('雲端刪除失敗：' + err.message);
-                    }
-                } else {
-                    carData = carData.filter(c => String(c.id) !== String(id));
-                    renderCars();
-                    alert('已從列表中移除。');
-                }
-            }
-        };
-
-        // 詳細資訊 Modal
         window.openDetailModal = function(id) {
             const car = carData.find(c => String(c.id) === String(id));
             if (!car) return;
@@ -911,7 +1598,7 @@
             document.getElementById('detailYear').innerText = car.year + ' 年';
             document.getElementById('detailMileage').innerText = car.mileage;
             document.getElementById('detailPrice').innerText = car.price + ' 萬';
-            document.getElementById('detailDesc').innerText = car.desc;
+            document.getElementById('detailDesc').innerText = car.desc || '嚴選認證中古車，車況透明，歡迎預約親臨現場試乘體驗。';
 
             document.getElementById('carDetailModal').classList.remove('hidden');
         };
@@ -919,6 +1606,93 @@
         window.closeDetailModal = function() {
             document.getElementById('carDetailModal').classList.add('hidden');
         };
+
+        window.openFirebaseTutorialModal = function() {
+            document.getElementById('firebaseTutorialModal').classList.remove('hidden');
+        };
+
+        window.closeFirebaseTutorialModal = function() {
+            document.getElementById('firebaseTutorialModal').classList.add('hidden');
+        };
+
+        // ========================================================
+        // 8. 自訂確認對話框與 Toast 訊息通知
+        // ========================================================
+        window.showConfirmDialog = function(title, message, onConfirm) {
+            const modal = document.getElementById('confirmDialogModal');
+            const titleEl = document.getElementById('confirmDialogTitle');
+            const msgEl = document.getElementById('confirmDialogMessage');
+            const confirmBtn = document.getElementById('confirmDialogConfirmBtn');
+            const cancelBtn = document.getElementById('confirmDialogCancelBtn');
+
+            if (!modal) return;
+            titleEl.innerText = title;
+            msgEl.innerText = message;
+            modal.classList.remove('hidden');
+
+            const handleConfirm = () => {
+                modal.classList.add('hidden');
+                cleanup();
+                if (typeof onConfirm === 'function') onConfirm();
+            };
+
+            const handleCancel = () => {
+                modal.classList.add('hidden');
+                cleanup();
+            };
+
+            const cleanup = () => {
+                confirmBtn.removeEventListener('click', handleConfirm);
+                cancelBtn.removeEventListener('click', handleCancel);
+            };
+
+            confirmBtn.addEventListener('click', handleConfirm);
+            cancelBtn.addEventListener('click', handleCancel);
+        };
+
+        window.showToast = function(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+
+            const toast = document.createElement('div');
+            toast.className = 'toast-animate pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl text-xs font-bold border transition-all';
+
+            let icon = 'fa-circle-info';
+            if (type === 'success') {
+                toast.classList.add('bg-dark-900', 'text-emerald-300', 'border-emerald-500/40');
+                icon = 'fa-circle-check text-emerald-400';
+            } else if (type === 'error') {
+                toast.classList.add('bg-dark-900', 'text-rose-300', 'border-rose-500/40');
+                icon = 'fa-circle-xmark text-rose-400';
+            } else if (type === 'warning') {
+                toast.classList.add('bg-dark-900', 'text-amber-300', 'border-amber-500/40');
+                icon = 'fa-triangle-exclamation text-amber-400';
+            } else {
+                toast.classList.add('bg-dark-900', 'text-slate-200', 'border-slate-700');
+                icon = 'fa-circle-info text-amber-400';
+            }
+
+            toast.innerHTML = `
+                <i class="fa-solid ${icon} text-base shrink-0"></i>
+                <span class="flex-grow leading-relaxed">${message}</span>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(20px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 4500);
+        };
+
+        // ========================================================
+        // 9. 頁面啟動生命週期
+        // ========================================================
+        window.addEventListener('DOMContentLoaded', () => {
+            initFirebaseConnection();
+            updateLoginUI();
+        });
     </script>
 </body>
 </html>
