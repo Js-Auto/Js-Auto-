@@ -512,11 +512,58 @@
         </div>
     </div>
 
-    <!-- JavaScript 控制邏輯 -->
-    <script>
+    <!-- Firebase 雲端資料庫模組與 JavaScript 控制邏輯 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 初始化 Firebase 配置 (雲端自動辨識)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'js-auto-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "AIzaSyDummyKeyForFallbackOnly",
+            authDomain: "js-auto-fallback.firebaseapp.com",
+            projectId: "js-auto-fallback",
+            storageBucket: "js-auto-fallback.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // 全域變數
+        let isStaffLoggedIn = localStorage.getItem('js_staff_logged') === 'true';
+        let staffPassword = localStorage.getItem('js_staff_pwd') || 'jsauto888';
+        let carData = [];
+        let currentFilter = 'ALL';
+        let currentUser = null;
+
+        // 音速登入認證
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.log('Auth Notice:', err);
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+                listenToCloudData();
+            }
+        });
+
+        // 預設車輛資料
         const defaultCars = [
             {
-                id: 1,
+                id: 'default-1',
                 title: '2021 BMW M4 Competition',
                 brand: 'BMW',
                 price: '388',
@@ -526,7 +573,7 @@
                 desc: '總代理 / 跑車排氣管 / 碳纖維賽車座椅 / 台灣超級鑑定 A 級認證'
             },
             {
-                id: 2,
+                id: 'default-2',
                 title: '2022 Porsche 911 GT3',
                 brand: 'PORSCHE',
                 price: '898',
@@ -536,7 +583,7 @@
                 desc: '歐規 / 跑車計時套件 / 後軸轉向 / 原廠保固中'
             },
             {
-                id: 3,
+                id: 'default-3',
                 title: '2020 Mercedes-AMG C63 S Coupe',
                 brand: 'BENZ',
                 price: '328',
@@ -547,28 +594,55 @@
             }
         ];
 
-        let isStaffLoggedIn = localStorage.getItem('js_staff_logged') === 'true';
-        let staffPassword = localStorage.getItem('js_staff_pwd') || 'jsauto888';
-        let carData = JSON.parse(localStorage.getItem('js_auto_cars')) || defaultCars;
-        let currentFilter = 'ALL';
+        // 雲端資料庫即時監聽與同步 (跨裝置同步關鍵)
+        function listenToCloudData() {
+            // 1. 監聽全站 LOGO 變更
+            const logoDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'logoConfig');
+            onSnapshot(logoDocRef, (docSnap) => {
+                if (docSnap.exists() && docSnap.data().logoUrl) {
+                    renderLogo(docSnap.data().logoUrl);
+                } else {
+                    renderLogo(localStorage.getItem('js_auto_logo'));
+                }
+            }, (err) => console.log(err));
+
+            // 2. 監聽雲端在庫車輛清單變更
+            const carsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'cars');
+            onSnapshot(carsColRef, (snapshot) => {
+                const cloudCars = [];
+                snapshot.forEach(docSnap => {
+                    cloudCars.push({ id: docSnap.id, ...docSnap.data() });
+                });
+
+                if (cloudCars.length > 0) {
+                    carData = cloudCars;
+                } else {
+                    // 若雲端無資料則加載預設值
+                    carData = defaultCars;
+                }
+                renderCars();
+            }, (err) => {
+                console.log(err);
+                renderCars();
+            });
+        }
 
         window.addEventListener('DOMContentLoaded', () => {
-            renderLogo();
+            initAuth();
             updateLoginUI();
             renderCars();
         });
 
         // 渲染 Logo 函數
-        function renderLogo() {
-            const storedLogo = localStorage.getItem('js_auto_logo');
+        window.renderLogo = function(logoUrl) {
             const logoContainers = ['navLogoContainer', 'heroLogoContainer', 'footerLogoContainer'];
 
             logoContainers.forEach(id => {
                 const container = document.getElementById(id);
                 if (!container) return;
 
-                if (storedLogo) {
-                    container.innerHTML = `<img src="${storedLogo}" alt="JS-AUTO Logo" class="w-full h-full object-cover">`;
+                if (logoUrl) {
+                    container.innerHTML = `<img src="${logoUrl}" alt="JS-AUTO Logo" class="w-full h-full object-cover">`;
                 } else {
                     container.innerHTML = `
                         <div class="text-amber-400 font-black text-center leading-none">
@@ -577,30 +651,49 @@
                     `;
                 }
             });
-        }
+        };
 
-        // Logo 檔案上傳
-        function handleLogoUpload(event) {
+        // Logo 檔案上傳 (同步至雲端)
+        window.handleLogoUpload = async function(event) {
             const file = event.target.files[0];
             if (!file) return;
 
             const reader = new FileReader();
-            reader.onload = function(e) {
-                localStorage.setItem('js_auto_logo', e.target.result);
-                renderLogo();
-                alert('車行 LOGO 已成功更換全站套用！');
+            reader.onload = async function(e) {
+                const base64Logo = e.target.result;
+                localStorage.setItem('js_auto_logo', base64Logo);
+                renderLogo(base64Logo);
+
+                if (currentUser) {
+                    try {
+                        const logoDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'logoConfig');
+                        await setDoc(logoDocRef, { logoUrl: base64Logo, updatedAt: Date.now() });
+                        alert('車行 LOGO 已成功同步上傳至全網雲端！所有訪客皆可即時看見。');
+                    } catch (err) {
+                        alert('本地已更新。雲端同步提醒：' + err.message);
+                    }
+                }
             };
             reader.readAsDataURL(file);
-        }
+        };
 
-        function resetLogo() {
+        window.resetLogo = async function() {
             localStorage.removeItem('js_auto_logo');
-            renderLogo();
-            alert('LOGO 已重設為預設狀態。');
-        }
+            renderLogo(null);
 
-        // 後台登入身分驗證 (不提示預設密碼)
-        function handleStaffAuthModal() {
+            if (currentUser) {
+                try {
+                    const logoDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'logoConfig');
+                    await setDoc(logoDocRef, { logoUrl: '', updatedAt: Date.now() });
+                    alert('全網 LOGO 已成功重設為預設狀態。');
+                } catch (err) {
+                    console.log(err);
+                }
+            }
+        };
+
+        // 後台登入驗證
+        window.handleStaffAuthModal = function() {
             if (isStaffLoggedIn) {
                 if (confirm('是否要登出員工後台權限？')) {
                     isStaffLoggedIn = false;
@@ -620,25 +713,25 @@
             } else if (password !== null) {
                 alert('密碼輸入錯誤，無法進入管理後台。');
             }
-        }
+        };
 
-        // 更新登入後介面顯示與隱藏
-        function updateLoginUI() {
+        // 更新 UI
+        window.updateLoginUI = function() {
             const navAddBtn = document.getElementById('navAddCarBtn');
             const staffBtnText = document.getElementById('staffBtnText');
 
             if (isStaffLoggedIn) {
-                navAddBtn.classList.remove('hidden');
-                staffBtnText.innerText = '管理後台中 (點擊登出)';
+                if (navAddBtn) navAddBtn.classList.remove('hidden');
+                if (staffBtnText) staffBtnText.innerText = '管理後台中 (點擊登出)';
             } else {
-                navAddBtn.classList.add('hidden');
-                staffBtnText.innerText = '員工後台上架';
+                if (navAddBtn) navAddBtn.classList.add('hidden');
+                if (staffBtnText) staffBtnText.innerText = '員工後台上架';
             }
             renderCars();
-        }
+        };
 
-        // 修改後台密碼
-        function updateStaffPassword() {
+        // 修改密碼
+        window.updateStaffPassword = function() {
             const newPwd = document.getElementById('newPasswordInput').value.trim();
             if (!newPwd) {
                 alert('請輸入有效的新密碼！');
@@ -648,23 +741,25 @@
             localStorage.setItem('js_staff_pwd', newPwd);
             document.getElementById('newPasswordInput').value = '';
             alert('後台通行密碼已成功更新！');
-        }
+        };
 
-        function openStaffModal() {
+        window.openStaffModal = function() {
             if (!isStaffLoggedIn) {
                 handleStaffAuthModal();
                 return;
             }
             document.getElementById('staffModal').classList.remove('hidden');
-        }
+        };
 
-        function closeStaffModal() {
+        window.closeStaffModal = function() {
             document.getElementById('staffModal').classList.add('hidden');
-        }
+        };
 
-        // 渲染車輛列表
-        function renderCars() {
+        // 渲染車輛卡片
+        window.renderCars = function() {
             const carGrid = document.getElementById('carGrid');
+            if (!carGrid) return;
+
             const filteredCars = currentFilter === 'ALL' 
                 ? carData 
                 : carData.filter(car => car.brand === currentFilter);
@@ -682,7 +777,7 @@
             carGrid.innerHTML = filteredCars.map(car => `
                 <div class="bg-dark-900 border border-slate-800 rounded-2xl overflow-hidden card-hover flex flex-col justify-between">
                     <div>
-                        <div class="relative h-52 overflow-hidden bg-black group cursor-pointer" onclick="openDetailModal(${car.id})">
+                        <div class="relative h-52 overflow-hidden bg-black group cursor-pointer" onclick="openDetailModal('${car.id}')">
                             <img src="${car.image}" alt="${car.title}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onerror="this.src='https://placehold.co/600x400/07080c/334155?text=JS-AUTO'">
                             <div class="absolute top-3 left-3 bg-amber-500 text-black text-[10px] font-black px-2.5 py-1 rounded-md shadow-md">
                                 ${car.brand}
@@ -693,7 +788,7 @@
                         </div>
 
                         <div class="p-5 space-y-3">
-                            <h4 class="font-black text-white text-base hover:text-amber-400 cursor-pointer transition-colors" onclick="openDetailModal(${car.id})">
+                            <h4 class="font-black text-white text-base hover:text-amber-400 cursor-pointer transition-colors" onclick="openDetailModal('${car.id}')">
                                 ${car.title}
                             </h4>
 
@@ -719,32 +814,34 @@
                         </div>
                         <div class="flex gap-2">
                             ${isStaffLoggedIn ? `
-                                <button onclick="deleteCar(${car.id})" class="bg-red-500/10 text-red-400 hover:bg-red-500/20 px-3 py-2 rounded-xl text-xs font-bold transition-all">
+                                <button onclick="deleteCar('${car.id}')" class="bg-red-500/10 text-red-400 hover:bg-red-500/20 px-3 py-2 rounded-xl text-xs font-bold transition-all">
                                     <i class="fa-solid fa-trash"></i> 刪除
                                 </button>
                             ` : ''}
-                            <button onclick="openDetailModal(${car.id})" class="gold-btn px-4 py-2 rounded-xl text-xs">
+                            <button onclick="openDetailModal('${car.id}')" class="gold-btn px-4 py-2 rounded-xl text-xs">
                                 詳情
                             </button>
                         </div>
                     </div>
                 </div>
             `).join('');
-        }
+        };
 
         // 品牌篩選
-        function filterCars(brand) {
+        window.filterCars = function(brand) {
             currentFilter = brand;
             document.querySelectorAll('.brand-filter-btn').forEach(btn => {
                 btn.classList.remove('bg-amber-500', 'text-black', 'font-bold');
                 btn.classList.add('bg-dark-900', 'text-slate-300');
             });
-            event.target.classList.add('bg-amber-500', 'text-black', 'font-bold');
+            if (event && event.target) {
+                event.target.classList.add('bg-amber-500', 'text-black', 'font-bold');
+            }
             renderCars();
-        }
+        };
 
-        // 新增車輛表單處理 (實體圖片檔案上傳)
-        function handleAddCar(e) {
+        // 雲端上架車輛
+        window.handleAddCar = async function(e) {
             e.preventDefault();
             const imageFile = document.getElementById('carImageFile').files[0];
             if (!imageFile) {
@@ -753,40 +850,60 @@
             }
 
             const reader = new FileReader();
-            reader.onload = function(event) {
-                const newCar = {
-                    id: Date.now(),
+            reader.onload = async function(event) {
+                const newCarData = {
                     title: document.getElementById('carTitle').value,
                     brand: document.getElementById('carBrand').value,
                     year: document.getElementById('carYear').value,
                     price: document.getElementById('carPrice').value,
                     mileage: document.getElementById('carMileage').value,
                     image: event.target.result,
-                    desc: document.getElementById('carDesc').value
+                    desc: document.getElementById('carDesc').value,
+                    createdAt: Date.now()
                 };
 
-                carData.unshift(newCar);
-                localStorage.setItem('js_auto_cars', JSON.stringify(carData));
-                renderCars();
+                if (currentUser) {
+                    try {
+                        const carsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'cars');
+                        await addDoc(carsColRef, newCarData);
+                        alert('新車輛已成功上傳至雲端！所有訪問網站的客人都能即時看到。');
+                    } catch (err) {
+                        alert('上傳至雲端時出錯：' + err.message);
+                    }
+                } else {
+                    carData.unshift({ id: String(Date.now()), ...newCarData });
+                    renderCars();
+                    alert('本機上架成功！');
+                }
+
                 closeStaffModal();
                 document.getElementById('addCarForm').reset();
-                alert('新車輛已成功上架！');
             };
             reader.readAsDataURL(imageFile);
-        }
+        };
 
-        // 刪除車輛
-        function deleteCar(id) {
-            if (confirm('確定要從在庫車庫中刪除此車輛資訊嗎？')) {
-                carData = carData.filter(c => c.id !== id);
-                localStorage.setItem('js_auto_cars', JSON.stringify(carData));
-                renderCars();
+        // 雲端刪除車輛
+        window.deleteCar = async function(id) {
+            if (confirm('確定要從雲端庫房中刪除此車輛資訊嗎？')) {
+                if (currentUser && !String(id).startsWith('default-')) {
+                    try {
+                        const carDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'cars', String(id));
+                        await deleteDoc(carDocRef);
+                        alert('車輛已成功從雲端刪除！');
+                    } catch (err) {
+                        alert('雲端刪除失敗：' + err.message);
+                    }
+                } else {
+                    carData = carData.filter(c => String(c.id) !== String(id));
+                    renderCars();
+                    alert('已從列表中移除。');
+                }
             }
-        }
+        };
 
         // 詳細資訊 Modal
-        function openDetailModal(id) {
-            const car = carData.find(c => c.id === id);
+        window.openDetailModal = function(id) {
+            const car = carData.find(c => String(c.id) === String(id));
             if (!car) return;
 
             document.getElementById('detailTitle').innerText = car.title;
@@ -797,11 +914,11 @@
             document.getElementById('detailDesc').innerText = car.desc;
 
             document.getElementById('carDetailModal').classList.remove('hidden');
-        }
+        };
 
-        function closeDetailModal() {
+        window.closeDetailModal = function() {
             document.getElementById('carDetailModal').classList.add('hidden');
-        }
+        };
     </script>
 </body>
 </html>
